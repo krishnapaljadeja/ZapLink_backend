@@ -1,25 +1,26 @@
-version: '3.7'
+version: "3.7"
 
 services:
   postgres:
     image: postgres:15
     restart: always
     environment:
-      - POSTGRES_DB=postgres
+      - POSTGRES_DB=ZapLink
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=prisma
+      - POSTGRES_PASSWORD=2005
+      - POSTGRES_HOST_AUTH_METHOD=trust
     ports:
-      - "5433:5433"
+      - "5432:5432"
     networks:
       - prisma-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ZapLink"]
       interval: 5s
       timeout: 2s
       retries: 20
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    command: postgres -c listen_addresses='*'
+    command: postgres -c listen_addresses='*' -c password_encryption=scram-sha-256
     logging:
       options:
         max-size: "10m"
