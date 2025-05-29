@@ -53,7 +53,7 @@ export const createZap = async (req: Request, res: any) => {
       },
     });
     const domain = process.env.BASE_URL || "http://localhost:3000";
-    const shortUrl = `${domain}/zap/${shortId}`;
+    const shortUrl = `${domain}/api/zaps/${shortId}`;
 
     const qrCode = await QRCode.toDataURL(shortUrl);
 
