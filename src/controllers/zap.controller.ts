@@ -16,7 +16,6 @@ export const createZap = async (req: Request, res: any) => {
     const {
       type,
       name,
-      cloudUrl,
       originalUrl,
       password,
       viewLimit,
@@ -38,7 +37,7 @@ export const createZap = async (req: Request, res: any) => {
     if (file) {
       uploadedUrl = (file as any).path;
     }
-
+    
     const zap = await prisma.zap.create({
       data: {
         type,
