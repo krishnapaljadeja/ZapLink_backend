@@ -37,7 +37,6 @@ export const createZap = async (req: Request, res: any) => {
     if (file) {
       uploadedUrl = (file as any).path;
     }
-    
     const zap = await prisma.zap.create({
       data: {
         type,
@@ -70,6 +69,7 @@ export const createZap = async (req: Request, res: any) => {
       )
     );
   } catch (err) {
+    console.error("CreateZap Error:", err)
     return res.status(500).json(new ApiError(500, "Internal server error"));
   }
 };
