@@ -36,6 +36,8 @@ export const createZap = async (req: Request, res: any) => {
 
     if (file) {
       uploadedUrl = (file as any).path;
+    }else if(originalUrl){
+      uploadedUrl = originalUrl;
     }
     const zap = await prisma.zap.create({
       data: {
@@ -115,14 +117,24 @@ export const getZapByShortId = async (req: Request, res: Response) => {
         return;
       }
     }
-
     await prisma.zap.update({
       where: { shortId },
       data: { viewCount: zap.viewCount + 1 },
     });
-
+    
     if (zap.originalUrl) {
-      res.redirect(zap.originalUrl);
+      const base64Data = zap.originalUrl;
+      const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+      if (matches) {
+        const mimeType = matches[1];
+        const base64 = matches[2];
+        const buffer = Buffer.from(base64, 'base64');
+      
+        res.set('Content-Type', mimeType);
+        res.send(buffer);
+      } else {
+        res.status(400).json({ error: 'Invalid base64 image data' });
+      }
     } else if (zap.cloudUrl) {
       res.redirect(zap.cloudUrl);
     } else {

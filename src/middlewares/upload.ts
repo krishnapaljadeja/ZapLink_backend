@@ -10,7 +10,6 @@ const storage = new CloudinaryStorage({
     const baseName = fileName.substring(0 , fileName.lastIndexOf('.'));
 
     const {type} = req.body; 
-    console.log(type) 
     let resource_type = "raw";
 
     if(type === "IMAGE" || type === "PDF"){
