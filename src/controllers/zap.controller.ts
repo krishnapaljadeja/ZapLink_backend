@@ -90,12 +90,19 @@ export const getZapByShortId = async (req: Request, res: Response) => {
       return;
     }
 
-    if (zap.expiresAt && new Date() > zap.expiresAt) {
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=expired`);
+    // Ensure consistent timezone handling for expiration check
+    if (zap.expiresAt) {
+      const expirationTime = new Date(zap.expiresAt);
+      const currentTime = new Date();
+
+      // Compare timestamps to avoid timezone issues
+      if (currentTime.getTime() > expirationTime.getTime()) {
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=expired`);
+        }
+        res.status(410).json(new ApiError(410, "Zap has expired."));
+        return;
       }
-      res.status(410).json(new ApiError(410, "Zap has expired."));
-      return;
     }
 
     if (zap.viewLimit !== null && zap.viewCount >= zap.viewLimit) {
