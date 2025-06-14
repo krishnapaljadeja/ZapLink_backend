@@ -11,16 +11,12 @@ dotenv.config();
 
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 6);
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
 export const createZap = async (req: Request, res: any) => {
   try {
-    const {
-      type,
-      name,
-      originalUrl,
-      password,
-      viewLimit,
-      expiresAt,
-    } = req.body;
+    const { type, name, originalUrl, password, viewLimit, expiresAt } =
+      req.body;
     const file = req.file;
 
     if (!file && !originalUrl) {
@@ -36,7 +32,7 @@ export const createZap = async (req: Request, res: any) => {
 
     if (file) {
       uploadedUrl = (file as any).path;
-    }else if(originalUrl){
+    } else if (originalUrl) {
       uploadedUrl = originalUrl;
     }
     const zap = await prisma.zap.create({
@@ -71,7 +67,7 @@ export const createZap = async (req: Request, res: any) => {
       )
     );
   } catch (err) {
-    console.error("CreateZap Error:", err)
+    console.error("CreateZap Error:", err);
     return res.status(500).json(new ApiError(500, "Internal server error"));
   }
 };
@@ -84,17 +80,27 @@ export const getZapByShortId = async (req: Request, res: Response) => {
       where: { shortId },
     });
 
+    const now = new Date();
     if (!zap) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=notfound`);
+      }
       res.status(404).json(new ApiError(404, "Zap not found."));
       return;
     }
 
     if (zap.expiresAt && new Date() > zap.expiresAt) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=expired`);
+      }
       res.status(410).json(new ApiError(410, "Zap has expired."));
       return;
     }
 
     if (zap.viewLimit !== null && zap.viewCount >= zap.viewLimit) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=viewlimit`);
+      }
       res.status(410).json(new ApiError(410, "Zap view limit reached."));
       return;
     }
@@ -117,23 +123,37 @@ export const getZapByShortId = async (req: Request, res: Response) => {
         return;
       }
     }
-    await prisma.zap.update({
+
+    // Increment view count BEFORE serving
+    const updatedZap = await prisma.zap.update({
       where: { shortId },
       data: { viewCount: zap.viewCount + 1 },
     });
-    
+
+    // After increment, check if limit is now exceeded
+    if (
+      updatedZap.viewLimit !== null &&
+      updatedZap.viewCount > updatedZap.viewLimit
+    ) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=viewlimit`);
+      }
+      res.status(410).json(new ApiError(410, "Zap view limit reached."));
+      return;
+    }
+
     if (zap.originalUrl) {
       const base64Data = zap.originalUrl;
       const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
       if (matches) {
         const mimeType = matches[1];
         const base64 = matches[2];
-        const buffer = Buffer.from(base64, 'base64');
-      
-        res.set('Content-Type', mimeType);
+        const buffer = Buffer.from(base64, "base64");
+
+        res.set("Content-Type", mimeType);
         res.send(buffer);
       } else {
-        res.status(400).json({ error: 'Invalid base64 image data' });
+        res.status(400).json({ error: "Invalid base64 image data" });
       }
     } else if (zap.cloudUrl) {
       res.redirect(zap.cloudUrl);
