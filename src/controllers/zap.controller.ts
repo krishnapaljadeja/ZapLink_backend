@@ -11,7 +11,8 @@ dotenv.config();
 
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 6);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND_URL =
+  process.env.FRONTEND_URL || "https://zaplink.krishnapaljadeja.com";
 
 export const createZap = async (req: Request, res: any) => {
   try {
@@ -48,7 +49,7 @@ export const createZap = async (req: Request, res: any) => {
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
     });
-    const domain = process.env.BASE_URL || "http://localhost:3000";
+    const domain = process.env.BASE_URL || "https://api.krishnapaljadeja.com";
     const shortUrl = `${domain}/api/zaps/${shortId}`;
 
     const qrCode = await QRCode.toDataURL(shortUrl);
