@@ -97,20 +97,12 @@ export const getZapByShortId = async (req: Request, res: Response) => {
 
       // Compare timestamps to avoid timezone issues
       if (currentTime.getTime() > expirationTime.getTime()) {
-        if (req.headers.accept && req.headers.accept.includes("text/html")) {
-          return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=expired`);
-        }
-        res.status(410).json(new ApiError(410, "Zap has expired."));
-        return;
+        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=expired`);
       }
     }
 
     if (zap.viewLimit !== null && zap.viewCount >= zap.viewLimit) {
-      if (req.headers.accept && req.headers.accept.includes("text/html")) {
-        return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=viewlimit`);
-      }
-      res.status(410).json(new ApiError(410, "Zap view limit reached."));
-      return;
+      return res.redirect(`${FRONTEND_URL}/zaps/${shortId}?error=viewlimit`);
     }
 
     if (zap.passwordHash) {
