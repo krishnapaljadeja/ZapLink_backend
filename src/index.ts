@@ -14,7 +14,10 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Use Routes
+app.get('/health', (req:any, res:any) => res.sendStatus(200));
 app.use("/api", routes);
+
+
 
 // Start the server
 const PORT = process.env.PORT || 3000;
