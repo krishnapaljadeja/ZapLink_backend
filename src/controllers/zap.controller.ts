@@ -7,6 +7,10 @@ import cloudinary from "../middlewares/cloudinary";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import dotenv from "dotenv";
+import mammoth from "mammoth";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 dotenv.config();
 
 const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 6);
@@ -14,34 +18,232 @@ const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 6);
 const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://zaplink.krishnapaljadeja.com";
 
+// Helper function to generate HTML for text content
+const generateTextHtml = (title: string, content: string) => {
+  const escapedContent = content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+  const escapedName = (title || "Untitled")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapedName}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #e5e7eb;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #111827;
+            min-height: 100vh;
+        }
+        .container {
+            background: #1f2937;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid #374151;
+        }
+        h1 {
+            color: #f9fafb;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 10px;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        .content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 16px;
+            color: #d1d5db;
+            line-height: 1.7;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #374151;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+            .container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>${escapedName}</h1>
+        <div class="content">${escapedContent}</div>
+        <div class="footer">
+            Powered by ZapLink
+        </div>
+    </div>
+</body>
+</html>`;
+};
+
+// Helper function to map frontend types to Prisma enum values
+const mapTypeToPrismaEnum = (
+  type: string
+):
+  | "PDF"
+  | "IMAGE"
+  | "VIDEO"
+  | "AUDIO"
+  | "ZIP"
+  | "URL"
+  | "TEXT"
+  | "WORD"
+  | "PPT"
+  | "UNIVERSAL" => {
+  const typeMap: Record<
+    string,
+    | "PDF"
+    | "IMAGE"
+    | "VIDEO"
+    | "AUDIO"
+    | "ZIP"
+    | "URL"
+    | "TEXT"
+    | "WORD"
+    | "PPT"
+    | "UNIVERSAL"
+  > = {
+    pdf: "PDF",
+    image: "IMAGE",
+    video: "VIDEO",
+    audio: "AUDIO",
+    archive: "ZIP",
+    url: "URL",
+    text: "TEXT",
+    document: "WORD",
+    presentation: "PPT",
+    spreadsheet: "UNIVERSAL",
+    URL: "URL",
+    TEXT: "TEXT",
+    DOCUMENT: "WORD",
+    PRESENTATION: "PPT",
+  };
+
+  return typeMap[type.toLowerCase()] || "UNIVERSAL";
+};
+
 export const createZap = async (req: Request, res: any) => {
   try {
-    const { type, name, originalUrl, password, viewLimit, expiresAt } =
-      req.body;
+    const {
+      type,
+      name,
+      originalUrl,
+      textContent,
+      password,
+      viewLimit,
+      expiresAt,
+    } = req.body;
     const file = req.file;
 
-    if (!file && !originalUrl) {
+    if (!file && !originalUrl && !textContent) {
       return res
         .status(400)
-        .json(new ApiError(400, "Either a file or a URL must be provided."));
+        .json(
+          new ApiError(
+            400,
+            "Either a file, URL, or text content must be provided."
+          )
+        );
     }
     const shortId = nanoid();
     const zapId = nanoid();
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
     let uploadedUrl: string | null = null;
+    let contentToStore: string | null = null;
 
     if (file) {
       uploadedUrl = (file as any).path;
+
+      // Handle DOCX and PPTX files by extracting text content
+      if (type === "document" || type === "presentation") {
+        try {
+          const filePath = (file as any).path;
+          const fileName = (file as any).originalname;
+          const fileExtension = path.extname(fileName).toLowerCase();
+
+          if (fileExtension === ".docx") {
+            // Extract text from DOCX
+            const result = await mammoth.extractRawText({ path: filePath });
+            const extractedText = result.value;
+
+            if (extractedText.length > 10000) {
+              return res
+                .status(400)
+                .json(
+                  new ApiError(
+                    400,
+                    "Extracted text is too long. Maximum 10,000 characters allowed."
+                  )
+                );
+            }
+
+            contentToStore = `DOCX_CONTENT:${extractedText}`;
+          } else if (fileExtension === ".pptx") {
+            // For PPTX, we'll store a message indicating it's a presentation
+            contentToStore = `PPTX_CONTENT:This is a PowerPoint presentation. The file has been uploaded and can be downloaded from the cloud storage.`;
+          }
+        } catch (error) {
+          console.error("Error extracting text from file:", error);
+          // If text extraction fails, fall back to regular file handling
+          contentToStore = null;
+        }
+      }
     } else if (originalUrl) {
       uploadedUrl = originalUrl;
+      contentToStore = originalUrl;
+    } else if (textContent) {
+      // Store text content with a special prefix to distinguish it from URLs
+      if (textContent.length > 10000) {
+        return res
+          .status(400)
+          .json(
+            new ApiError(
+              400,
+              "Text content is too long. Maximum 10,000 characters allowed."
+            )
+          );
+      }
+      contentToStore = `TEXT_CONTENT:${textContent}`;
     }
+
     const zap = await prisma.zap.create({
       data: {
-        type,
+        type: mapTypeToPrismaEnum(type),
         name,
         cloudUrl: uploadedUrl,
-        originalUrl: originalUrl || null,
+        originalUrl: contentToStore,
         qrId: zapId,
         shortId,
         passwordHash: hashedPassword,
@@ -143,17 +345,50 @@ export const getZapByShortId = async (req: Request, res: Response) => {
     }
 
     if (zap.originalUrl) {
-      const base64Data = zap.originalUrl;
-      const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-      if (matches) {
-        const mimeType = matches[1];
-        const base64 = matches[2];
-        const buffer = Buffer.from(base64, "base64");
+      // Check if originalUrl is a valid URL (starts with http:// or https://)
+      if (
+        zap.originalUrl.startsWith("http://") ||
+        zap.originalUrl.startsWith("https://")
+      ) {
+        // It's a URL, redirect to it
+        res.redirect(zap.originalUrl);
+      } else if (zap.originalUrl.startsWith("TEXT_CONTENT:")) {
+        // It's text content, serve it as HTML
+        const textContent = zap.originalUrl.substring(13); // Remove "TEXT_CONTENT:" prefix
 
-        res.set("Content-Type", mimeType);
-        res.send(buffer);
+        // Generate HTML for text content
+        const html = generateTextHtml(zap.name || "Untitled", textContent);
+
+        res.set("Content-Type", "text/html");
+        res.send(html);
+      } else if (
+        zap.originalUrl.startsWith("DOCX_CONTENT:") ||
+        zap.originalUrl.startsWith("PPTX_CONTENT:")
+      ) {
+        // It's text content, serve it as HTML
+        const textContent = zap.originalUrl.substring(13); // Remove "DOCX_CONTENT:" or "PPTX_CONTENT:" prefix
+
+        // Generate HTML for text content
+        const html = generateTextHtml(zap.name || "Untitled", textContent);
+
+        res.set("Content-Type", "text/html");
+        res.send(html);
       } else {
-        res.status(400).json({ error: "Invalid base64 image data" });
+        // It might be base64 data, try to parse it
+        const base64Data = zap.originalUrl;
+        const matches = base64Data.match(
+          /^data:(image\/[a-zA-Z]+);base64,(.+)$/
+        );
+        if (matches) {
+          const mimeType = matches[1];
+          const base64 = matches[2];
+          const buffer = Buffer.from(base64, "base64");
+
+          res.set("Content-Type", mimeType);
+          res.send(buffer);
+        } else {
+          res.status(400).json({ error: "Invalid base64 image data" });
+        }
       }
     } else if (zap.cloudUrl) {
       res.redirect(zap.cloudUrl);
