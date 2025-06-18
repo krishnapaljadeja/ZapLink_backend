@@ -311,6 +311,9 @@ export const getZapByShortId = async (req: Request, res: Response) => {
       const providedPassword = req.query.password as string;
 
       if (!providedPassword) {
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          return res.redirect(`${FRONTEND_URL}/zaps/${shortId}`);
+        }
         res.status(401).json(new ApiError(401, "Password required."));
         return;
       }
@@ -321,6 +324,11 @@ export const getZapByShortId = async (req: Request, res: Response) => {
       );
 
       if (!isPasswordValid) {
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          return res.redirect(
+            `${FRONTEND_URL}/zaps/${shortId}?error=incorrect_password`
+          );
+        }
         res.status(401).json(new ApiError(401, "Incorrect password."));
         return;
       }
@@ -351,16 +359,23 @@ export const getZapByShortId = async (req: Request, res: Response) => {
         zap.originalUrl.startsWith("https://")
       ) {
         // It's a URL, redirect to it
-        res.redirect(zap.originalUrl);
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          res.redirect(zap.originalUrl);
+        } else {
+          res.json({ url: zap.originalUrl, type: "redirect" });
+        }
       } else if (zap.originalUrl.startsWith("TEXT_CONTENT:")) {
         // It's text content, serve it as HTML
         const textContent = zap.originalUrl.substring(13); // Remove "TEXT_CONTENT:" prefix
 
-        // Generate HTML for text content
-        const html = generateTextHtml(zap.name || "Untitled", textContent);
-
-        res.set("Content-Type", "text/html");
-        res.send(html);
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          // Generate HTML for text content
+          const html = generateTextHtml(zap.name || "Untitled", textContent);
+          res.set("Content-Type", "text/html");
+          res.send(html);
+        } else {
+          res.json({ content: textContent, type: "text", name: zap.name });
+        }
       } else if (
         zap.originalUrl.startsWith("DOCX_CONTENT:") ||
         zap.originalUrl.startsWith("PPTX_CONTENT:")
@@ -368,11 +383,14 @@ export const getZapByShortId = async (req: Request, res: Response) => {
         // It's text content, serve it as HTML
         const textContent = zap.originalUrl.substring(13); // Remove "DOCX_CONTENT:" or "PPTX_CONTENT:" prefix
 
-        // Generate HTML for text content
-        const html = generateTextHtml(zap.name || "Untitled", textContent);
-
-        res.set("Content-Type", "text/html");
-        res.send(html);
+        if (req.headers.accept && req.headers.accept.includes("text/html")) {
+          // Generate HTML for text content
+          const html = generateTextHtml(zap.name || "Untitled", textContent);
+          res.set("Content-Type", "text/html");
+          res.send(html);
+        } else {
+          res.json({ content: textContent, type: "document", name: zap.name });
+        }
       } else {
         // It might be base64 data, try to parse it
         const base64Data = zap.originalUrl;
@@ -384,14 +402,22 @@ export const getZapByShortId = async (req: Request, res: Response) => {
           const base64 = matches[2];
           const buffer = Buffer.from(base64, "base64");
 
-          res.set("Content-Type", mimeType);
-          res.send(buffer);
+          if (req.headers.accept && req.headers.accept.includes("text/html")) {
+            res.set("Content-Type", mimeType);
+            res.send(buffer);
+          } else {
+            res.json({ data: base64Data, type: "image", name: zap.name });
+          }
         } else {
           res.status(400).json({ error: "Invalid base64 image data" });
         }
       }
     } else if (zap.cloudUrl) {
-      res.redirect(zap.cloudUrl);
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        res.redirect(zap.cloudUrl);
+      } else {
+        res.json({ url: zap.cloudUrl, type: "file" });
+      }
     } else {
       res.status(500).json(new ApiError(500, "Zap content not found."));
     }
